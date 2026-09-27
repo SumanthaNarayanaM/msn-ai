@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="MSN AI v0.1 — your fully local AI assistant for coding, content creation, analysis and more.">
+<title>MSN AI · Your Local AI Assistant</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='.5' stop-color='%23a855f7'/%3E%3Cstop offset='1' stop-color='%23ec4899'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='9' fill='%23090b12'/%3E%3Cpath d='M9 22 14 10h2l5 12h-2.6l-1.1-2.7h-4.7L11.5 22H9Zm4.2-4.7h3.5L15 13l-1.8 4.3Z' fill='url(%23g)'/%3E%3Ccircle cx='23' cy='11' r='2.4' fill='%2334d399'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#composerInput">Skip to message input</a>
+
+<!-- ==================== ANIMATED BACKGROUND ==================== -->
+<div class="bg" aria-hidden="true">
+  <div class="bg__aurora">
+    <span class="blob blob--1"></span>
+    <span class="blob blob--2"></span>
+    <span class="blob blob--3"></span>
+    <span class="blob blob--4"></span>
+  </div>
+  <div class="bg__grid"></div>
+  <div class="bg__glow"></div>
+</div>
+
+<!-- ==================== ICON SPRITE ==================== -->
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <g id="i-base" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></g>
+  </defs>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/></symbol>
+  <symbol id="i-tools" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0 5 5L21 10l-7-7-4.5 4.5"/><path d="M6.5 14.5a4 4 0 0 0-5-5L3 11l7 7 4.5-4.5"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="3"/><path d="m15.5 10.5 5-2.5v8l-5-2.5"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2.5H7a2.5 2.5 0 0 0-2.5 2.5v14A2.5 2.5 0 0 0 7 21.5h10a2.5 2.5 0 0 0 2.5-2.5V8l-5.5-5.5Z"/><path d="M14 2.5V8h5.5M8.5 13h7M8.5 17h5"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h4v15H4zM10 4.5h4v15h-4z"/><path d="m16.2 5.3 3.8 1-4 14.4-3.8-1z"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12c0 4.1-3.8 7.4-8.5 7.4-1 0-2-.1-2.9-.4L4 20.5l1.4-3.6A7 7 0 0 1 3.5 12C3.5 7.9 7.3 4.6 12 4.6s8.5 3.3 8.5 7.4Z"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8.5 8-5 4 5 4M15.5 8l5 4-5 4M13.5 5l-3 14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.5-4.5 4 4L16 13l4 4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9Z"/><path d="M13.7 19a2 2 0 0 1-3.4 0"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12 20 4.5 15.5 20 12 13.5 4.5 12Z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 5.5A2.5 2.5 0 0 0 13 3H6a2.5 2.5 0 0 0-2.5 2.5v7A2.5 2.5 0 0 0 6 15"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M9.5 6.5V4.2A1.2 1.2 0 0 1 10.7 3h2.6a1.2 1.2 0 0 1 1.2 1.2v2.3M6.5 6.5l.9 13a1.6 1.6 0 0 0 1.6 1.5h6a1.6 1.6 0 0 0 1.6-1.5l.9-13"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 4.5V10h-5.5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.5 1.5 0 0 0 .3 1.7l.1.1a1.8 1.8 0 1 1-2.6 2.6l-.1-.1a1.5 1.5 0 0 0-2.5 1.1v.3a1.8 1.8 0 1 1-3.6 0v-.2a1.5 1.5 0 0 0-2.6-1 1.8 1.8 0 1 1-2.6-2.6l.1-.1a1.5 1.5 0 0 0-1.1-2.5h-.3a1.8 1.8 0 1 1 0-3.6h.2a1.5 1.5 0 0 0 1-2.6l-.1-.1a1.8 1.8 0 1 1 2.6-2.6l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.3a1.8 1.8 0 1 1 3.6 0v.2a1.5 1.5 0 0 0 2.5 1 1.8 1.8 0 1 1 2.6 2.6l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.3a1.8 1.8 0 1 1 0 3.6h-.2a1.5 1.5 0 0 0-1.4.9Z"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5 13.9 8 19.5 10 13.9 12 12 17.5 10.1 12 4.5 10 10.1 8 12 2.5Z"/><path d="M19 15.5 19.9 18 22.5 19 19.9 20 19 22.5 18.1 20 15.5 19 18.1 18 19 15.5Z" opacity=".7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.3v.2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-copy-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+</svg>
+
+<!-- ==================== APP SHELL ==================== -->
+<div class="shell">
+
+  <div class="scrim" id="scrim" hidden></div>
+
+  <!-- ---------- SIDEBAR ---------- -->
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+    <div class="sidebar__head">
+      <a class="brand" href="./" aria-label="MSN AI home">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" role="presentation">
+            <defs>
+              <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#ec4899"/>
+              </linearGradient>
+            </defs>
+            <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#brandGrad)" opacity=".16"/>
+            <rect x="1.5" y="1.5" width="29" height="29" rx="8.5" fill="none" stroke="url(#brandGrad)" stroke-width="1.4"/>
+            <path d="M9 22 14 10h2l5 12h-2.6l-1.1-2.7h-4.7L11.5 22H9Zm4.2-4.7h3.5L15 13l-1.8 4.3Z" fill="url(#brandGrad)"/>
+            <circle cx="23" cy="11" r="2.2" fill="#34d399"/>
+          </svg>
+        </span>
+        <span class="brand__text">
+          <strong>MSN AI</strong>
+          <small>YOUR LOCAL AI ASSISTANT</small>
+        </span>
+      </a>
+      <button type="button" class="icon-btn sidebar__close" id="sidebarClose" aria-label="Close navigation">
+        <svg aria-hidden="true"><use href="#i-close"/></svg>
+      </button>
+    </div>
+
+    <div class="sidebar__scroll">
+      <nav class="nav" aria-label="Workspace">
+        <button type="button" class="btn-new" id="newChatBtn">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg>
+          <span>New Chat</span>
+        </button>
+
+        <ul class="nav__list">
+          <li><button type="button" class="nav__item" data-nav="explore"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Explore</span></button></li>
+          <li><button type="button" class="nav__item" data-soon="AI Tools"><svg aria-hidden="true"><use href="#i-tools"/></svg><span>AI Tools</span><em class="tag">Soon</em></button></li>
+          <li><button type="button" class="nav__item" data-soon="Video Creation"><svg aria-hidden="true"><use href="#i-video"/></svg><span>Video Creation</span><em class="tag">Soon</em></button></li>
+          <li><button type="button" class="nav__item" data-soon="Voice Mode"><svg aria-hidden="true"><use href="#i-mic"/></svg><span>Voice Mode</span><em class="tag">Soon</em></button></li>
+          <li><button type="button" class="nav__item" data-soon="Documents"><svg aria-hidden="true"><use href="#i-doc"/></svg><span>Documents</span><em class="tag">Soon</em></button></li>
+          <li><button type="button" class="nav__item" data-nav="prompts"><svg aria-hidden="true"><use href="#i-library"/></svg><span>Prompts Library</span></button></li>
+        </ul>
+      </nav>
+
+      <section class="recent" aria-labelledby="recentHeading">
+        <div class="recent__head">
+          <h2 class="recent__title" id="recentHeading">Recent Chats</h2>
+          <button type="button" class="icon-btn icon-btn--sm" id="refreshSessions" aria-label="Refresh recent chats" title="Refresh">
+            <svg aria-hidden="true"><use href="#i-refresh"/></svg>
+          </button>
+        </div>
+        <ul class="recent__list" id="recentList"></ul>
+        <p class="recent__empty" id="recentEmpty">No conversations yet. Start chatting!</p>
+      </section>
+    </div>
+
+    <div class="sidebar__foot">
+      <div class="model-chip" title="Model reported by the backend health endpoint">
+        <span class="dot dot--live" id="sideDot" data-state="connecting" aria-hidden="true"></span>
+        <span class="model-chip__text">
+          <strong id="sideModel">AI Model (Local)</strong>
+          <small id="sideProvider">checking…</small>
+        </span>
+      </div>
+      <p class="version">MSN AI <span id="appVersion">v0.1</span></p>
+      <button type="button" class="icon-btn" id="settingsBtn" aria-label="Open settings" title="Settings">
+        <svg aria-hidden="true"><use href="#i-settings"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ---------- WORKSPACE ---------- -->
+  <div class="workspace">
+
+    <!-- ---------- TOP BAR ---------- -->
+    <header class="topbar">
+      <button type="button" class="icon-btn topbar__menu" id="menuBtn" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+        <svg aria-hidden="true"><use href="#i-menu"/></svg>
+      </button>
+
+      <div class="search">
+        <svg class="search__icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input type="search" id="sessionSearch" class="search__input" placeholder="Search chats" aria-label="Search your chats" autocomplete="off">
+        <kbd class="search__kbd" aria-hidden="true">/</kbd>
+      </div>
+
+      <div class="topbar__right">
+        <div class="status" id="statusPill" role="status" aria-live="polite" data-state="connecting" title="Live status from GET /api/v1/health">
+          <span class="dot" data-state="connecting" aria-hidden="true"></span>
+          <span class="status__text" id="statusText">Connecting…</span>
+        </div>
+
+        <button type="button" class="icon-btn" id="themeBtn" aria-label="Toggle theme" title="Toggle theme">
+          <svg aria-hidden="true" class="i-sun"><use href="#i-sun"/></svg>
+          <svg aria-hidden="true" class="i-moon"><use href="#i-moon"/></svg>
+        </button>
+
+        <button type="button" class="icon-btn" id="notifyBtn" aria-label="Notifications" title="Notifications">
+          <svg aria-hidden="true"><use href="#i-bell"/></svg>
+          <span class="badge" id="notifyBadge" hidden>0</span>
+        </button>
+
+        <button type="button" class="avatar" id="avatarBtn" aria-label="Local session — no account required">
+          <span class="avatar__text">AI</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ---------- OFFLINE BANNER ---------- -->
+    <div class="banner" id="offlineBanner" role="alert" hidden>
+      <svg aria-hidden="true"><use href="#i-alert"/></svg>
+      <div class="banner__text">
+        <strong>Backend Offline</strong>
+        <span id="offlineDetail">MSN AI cannot reach <code id="apiBaseLabel">127.0.0.1:8000</code>.</span>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm" id="retryHealth">
+        <svg aria-hidden="true"><use href="#i-refresh"/></svg><span>Retry</span>
+      </button>
+    </div>
+
+    <!-- ---------- MAIN ---------- -->
+    <main class="main" id="main">
+
+      <!-- ===== WELCOME VIEW ===== -->
+      <section class="view view--welcome is-active" id="welcomeView" aria-label="Welcome">
+        <div class="welcome">
+          <p class="eyebrow"><svg aria-hidden="true"><use href="#i-lock"/></svg> Local-first · Private · Runs on your machine</p>
+          <h1 class="welcome__hello" id="greeting">Hello 👋</h1>
+          <h2 class="welcome__ask">How can I help you today?</h2>
+          <p class="welcome__sub">Your local AI assistant for coding, content creation, analysis and more.</p>
+
+          <div class="chips" role="group" aria-label="Filter quick prompts by category" id="categoryChips"></div>
+
+          <div class="cards" id="featureCards"></div>
+
+          <section class="prompts" aria-labelledby="promptsHeading">
+            <div class="prompts__head">
+              <h3 class="prompts__title" id="promptsHeading">Quick prompts</h3>
+              <span class="prompts__hint">Click to load into the composer</span>
+            </div>
+            <div class="prompts__grid" id="quickPrompts"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ===== CHAT VIEW ===== -->
+      <section class="view view--chat" id="chatView" aria-label="Conversation" hidden>
+        <div class="thread" id="thread" tabindex="-1">
+          <div class="thread__inner" id="threadInner"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ---------- COMPOSER DOCK ---------- -->
+    <div class="dock" id="dock">
+      <form class="composer" id="composerForm" autocomplete="off">
+        <div class="composer__tools">
+          <div class="composer__attach" role="group" aria-label="Attachments (not yet supported by the backend)">
+            <button type="button" class="tool" data-soon="Attachments" aria-label="Add attachment — coming soon" title="Coming soon">
+              <svg aria-hidden="true"><use href="#i-plus"/></svg>
+            </button>
+            <button type="button" class="tool tool--label" data-soon="File upload" title="Coming soon">
+              <svg aria-hidden="true"><use href="#i-upload"/></svg><span>Upload</span>
+            </button>
+            <button type="button" class="tool tool--label" data-soon="Image input" title="Coming soon">
+              <svg aria-hidden="true"><use href="#i-image"/></svg><span>Image</span>
+            </button>
+            <button type="button" class="tool tool--label" data-soon="Voice Mode" title="Coming soon">
+              <svg aria-hidden="true"><use href="#i-mic"/></svg><span>Voice</span>
+            </button>
+            <button type="button" class="tool tool--label" data-soon="Video input" title="Coming soon">
+              <svg aria-hidden="true"><use href="#i-video"/></svg><span>Video</span>
+            </button>
+          </div>
+
+          <button type="button" class="model-select" id="modelSelect" aria-haspopup="dialog" aria-expanded="false" title="Model details reported by the backend">
+            <svg aria-hidden="true"><use href="#i-sparkle"/></svg>
+            <span class="model-select__name">MSN AI v0.1</span>
+            <span class="model-select__sub" id="composerModel">local</span>
+          </button>
+        </div>
+
+        <label class="visually-hidden" for="composerInput">Message MSN AI</label>
+        <textarea id="composerInput" class="composer__input" rows="1" placeholder="Ask MSN AI anything..." maxlength="4000"></textarea>
+
+        <div class="composer__foot">
+          <p class="composer__hint" id="composerHint">
+            <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
+          </p>
+          <div class="composer__actions">
+            <button type="button" class="btn btn--stop" id="stopBtn" hidden>
+              <svg aria-hidden="true"><use href="#i-stop"/></svg><span>Stop</span>
+            </button>
+            <button type="submit" class="btn btn--send" id="sendBtn" disabled>
+              <span class="btn__label">Send</span>
+              <svg aria-hidden="true"><use href="#i-send"/></svg>
+            </button>
+          </div>
+        </div>
+      </form>
+      <p class="dock__note">Responses are generated locally on your CPU by llama.cpp — nothing leaves this machine.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== SETTINGS DIALOG ==================== -->
+<dialog class="modal" id="settingsModal" aria-labelledby="settingsTitle">
+  <form method="dialog" class="modal__head">
+    <h2 id="settingsTitle">Settings &amp; Backend</h2>
+    <button type="submit" class="icon-btn" aria-label="Close settings">
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </form>
+  <div class="modal__body">
+    <p class="modal__intro">Everything below is read live from the MSN AI FastAPI backend.</p>
+    <dl class="kv" id="settingsKv"></dl>
+    <div class="modal__actions">
+      <button type="button" class="btn btn--ghost" id="settingsRefresh">
+        <svg aria-hidden="true"><use href="#i-refresh"/></svg><span>Re-check backend</span>
+      </button>
+    </div>
+  </div>
+</dialog>
+
+<!-- ==================== MODEL DIALOG ==================== -->
+<dialog class="modal" id="modelModal" aria-labelledby="modelTitle">
+  <form method="dialog" class="modal__head">
+    <h2 id="modelTitle">Model</h2>
+    <button type="submit" class="icon-btn" aria-label="Close model details">
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </form>
+  <div class="modal__body">
+    <div class="modal__hero">
+      <span class="dot dot--lg" id="modelDot" data-state="connecting" aria-hidden="true"></span>
+      <div>
+        <strong id="modelName">Checking backend…</strong>
+        <small id="modelProvider">—</small>
+      </div>
+    </div>
+    <dl class="kv" id="modelKv"></dl>
+    <p class="modal__foot">MSN AI v0.1 ships one local model. Streaming and server-side cancellation are not implemented in the backend yet.</p>
+  </div>
+</dialog>
+
+<!-- ==================== PROMPTS DIALOG ==================== -->
+<dialog class="modal modal--wide" id="promptsModal" aria-labelledby="promptsTitle">
+  <form method="dialog" class="modal__head">
+    <h2 id="promptsTitle">Prompts Library</h2>
+    <button type="submit" class="icon-btn" aria-label="Close prompts library">
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </form>
+  <div class="modal__body">
+    <p class="modal__intro">Pick a starter prompt — it loads into the composer so you can edit before sending.</p>
+    <div class="lib" id="promptLibrary"></div>
+  </div>
+</dialog>
+
+<!-- ==================== TOASTS ==================== -->
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<!-- Vendored, offline-capable. Loaded before the module. -->
+<script src="./vendor/marked.min.js" defer></script>
+<script src="./vendor/highlight.min.js" defer></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

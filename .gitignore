@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Environment & secrets
+.env
+.env.local
+*.env
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# MSN AI runtime assets (keep the layout, drop the contents)
+data/conversations/
+model_storage/base/*
+model_storage/checkpoints/*
+model_storage/cache/*
+data/generated/images/*
+data/generated/videos/*
+!data/generated/images/.gitkeep
+!data/generated/videos/.gitkeep
+!model_storage/base/.gitkeep
+!model_storage/checkpoints/.gitkeep
+!model_storage/cache/.gitkeep
+
+# Models are large; never commit binaries/weights
+*.gguf
+*.safetensors
+*.bin

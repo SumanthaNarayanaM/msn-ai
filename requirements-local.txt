@@ -1,0 +1,4 @@
+# Optional runtime for the REAL local model (llama.cpp backend).
+# Install only if you want MSN_AI_PROVIDER=llamacpp / =local.
+# Prebuilt Windows wheel from the llama-cpp-python GitHub release:
+llama-cpp-python @ https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35/llama_cpp_python-0.3.35-py3-none-win_amd64.whl
