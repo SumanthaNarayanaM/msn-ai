@@ -77,6 +77,44 @@ class ValidationError(MSNError):
     code = "validation_error"
 
 
+class UnsupportedFileTypeError(MSNError):
+    """Raised when an uploaded file's type is not supported by MSN AI."""
+
+    status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+    code = "unsupported_file_type"
+
+
+class FileTooLargeError(MSNError):
+    """Raised when an upload exceeds the configured size ceiling."""
+
+    # Starlette renamed HTTP_413_REQUEST_ENTITY_TOO_LARGE to
+    # HTTP_413_CONTENT_TOO_LARGE. Probe the new name without touching the old
+    # one, since merely reading the deprecated attribute emits a warning.
+    status_code = getattr(status, "HTTP_413_CONTENT_TOO_LARGE", 413)
+    code = "file_too_large"
+
+
+class UnsafeFileNameError(MSNError):
+    """Raised when a filename or path is unsafe (traversal, control chars...)."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    code = "unsafe_filename"
+
+
+class FileNotFoundError_(MSNError):
+    """Raised when an uploaded file id does not exist."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+    code = "file_not_found"
+
+
+class ExtractionError(MSNError):
+    """Raised when content extraction fails for a supported file type."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    code = "extraction_failed"
+
+
 def _error_response(exc: MSNError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content=exc.to_payload())
 

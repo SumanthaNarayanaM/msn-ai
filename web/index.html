@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="MSN AI v0.1 — your fully local AI assistant for coding, content creation, analysis and more.">
+<meta name="description" content="MSN AI v0.2 — your fully local AI assistant for coding, content creation, analysis and more.">
 <title>MSN AI · Your Local AI Assistant</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='.5' stop-color='%23a855f7'/%3E%3Cstop offset='1' stop-color='%23ec4899'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='9' fill='%23090b12'/%3E%3Cpath d='M9 22 14 10h2l5 12h-2.6l-1.1-2.7h-4.7L11.5 22H9Zm4.2-4.7h3.5L15 13l-1.8 4.3Z' fill='url(%23g)'/%3E%3Ccircle cx='23' cy='11' r='2.4' fill='%2334d399'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="./styles.css">
@@ -102,10 +102,11 @@
 
         <ul class="nav__list">
           <li><button type="button" class="nav__item" data-nav="explore"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Explore</span></button></li>
+          <li><button type="button" class="nav__item" data-nav="files"><svg aria-hidden="true"><use href="#i-doc"/></svg><span>My Files</span></button></li>
           <li><button type="button" class="nav__item" data-soon="AI Tools"><svg aria-hidden="true"><use href="#i-tools"/></svg><span>AI Tools</span><em class="tag">Soon</em></button></li>
           <li><button type="button" class="nav__item" data-soon="Video Creation"><svg aria-hidden="true"><use href="#i-video"/></svg><span>Video Creation</span><em class="tag">Soon</em></button></li>
           <li><button type="button" class="nav__item" data-soon="Voice Mode"><svg aria-hidden="true"><use href="#i-mic"/></svg><span>Voice Mode</span><em class="tag">Soon</em></button></li>
-          <li><button type="button" class="nav__item" data-soon="Documents"><svg aria-hidden="true"><use href="#i-doc"/></svg><span>Documents</span><em class="tag">Soon</em></button></li>
+          <li><button type="button" class="nav__item" data-soon="Image Generation"><svg aria-hidden="true"><use href="#i-image"/></svg><span>Image Generation</span><em class="tag">Soon</em></button></li>
           <li><button type="button" class="nav__item" data-nav="prompts"><svg aria-hidden="true"><use href="#i-library"/></svg><span>Prompts Library</span></button></li>
         </ul>
       </nav>
@@ -130,7 +131,7 @@
           <small id="sideProvider">checking…</small>
         </span>
       </div>
-      <p class="version">MSN AI <span id="appVersion">v0.1</span></p>
+      <p class="version">MSN AI <span id="appVersion">v0.2</span></p>
       <button type="button" class="icon-btn" id="settingsBtn" aria-label="Open settings" title="Settings">
         <svg aria-hidden="true"><use href="#i-settings"/></svg>
       </button>
@@ -218,36 +219,73 @@
         </div>
       </section>
 
+      <section class="view view--files" id="filesView" aria-label="My files" hidden>
+        <div class="files">
+
+          <header class="files__head">
+            <div>
+              <h2 class="files__title">My Files</h2>
+              <p class="files__sub" id="filesSummary">Upload documents, images and video. MSN AI reads them locally and cites what it used.</p>
+            </div>
+            <div class="files__headactions">
+              <label class="toggle" title="Let MSN AI consult your files when answering">
+                <input type="checkbox" id="knowledgeToggle" checked>
+                <span>Use my files</span>
+              </label>
+              <button type="button" class="btn btn--primary" id="uploadBtn">
+                <svg aria-hidden="true"><use href="#i-upload"/></svg><span>Upload files</span>
+              </button>
+            </div>
+          </header>
+
+          <div class="caps" id="capsRow" aria-label="Available reading capabilities"></div>
+
+          <div class="dropzone" id="dropzone" tabindex="0" role="button"
+               aria-label="Drop files here or press Enter to browse">
+            <svg class="dropzone__icon" aria-hidden="true"><use href="#i-upload"/></svg>
+            <p class="dropzone__title">Drop files here</p>
+            <p class="dropzone__hint" id="dropHint">or click to browse. Everything is processed on this machine.</p>
+            <div class="dropzone__progress" id="dropProgress" hidden>
+              <div class="bar"><div class="bar__fill" id="dropBar"></div></div>
+              <span id="dropLabel">Uploading…</span>
+            </div>
+          </div>
+
+          <div class="files__list" id="filesList" aria-live="polite"></div>
+          <p class="files__empty" id="filesEmpty">No files yet. Upload a document, image or video to get started.</p>
+
+        </div>
+      </section>
+
     </main>
 
     <!-- ---------- COMPOSER DOCK ---------- -->
     <div class="dock" id="dock">
       <form class="composer" id="composerForm" autocomplete="off">
         <div class="composer__tools">
-          <div class="composer__attach" role="group" aria-label="Attachments (not yet supported by the backend)">
-            <button type="button" class="tool" data-soon="Attachments" aria-label="Add attachment — coming soon" title="Coming soon">
+          <div class="composer__attach" role="group" aria-label="Attach files to your message">
+            <button type="button" class="tool" id="attachBtn" aria-label="Attach files" title="Attach files">
               <svg aria-hidden="true"><use href="#i-plus"/></svg>
             </button>
-            <button type="button" class="tool tool--label" data-soon="File upload" title="Coming soon">
+            <button type="button" class="tool tool--label" id="uploadBtnMini" title="Upload files to My Files">
               <svg aria-hidden="true"><use href="#i-upload"/></svg><span>Upload</span>
             </button>
-            <button type="button" class="tool tool--label" data-soon="Image input" title="Coming soon">
+            <button type="button" class="tool tool--label" data-soon="Image generation" title="Coming soon">
               <svg aria-hidden="true"><use href="#i-image"/></svg><span>Image</span>
             </button>
             <button type="button" class="tool tool--label" data-soon="Voice Mode" title="Coming soon">
               <svg aria-hidden="true"><use href="#i-mic"/></svg><span>Voice</span>
             </button>
-            <button type="button" class="tool tool--label" data-soon="Video input" title="Coming soon">
-              <svg aria-hidden="true"><use href="#i-video"/></svg><span>Video</span>
-            </button>
           </div>
 
           <button type="button" class="model-select" id="modelSelect" aria-haspopup="dialog" aria-expanded="false" title="Model details reported by the backend">
             <svg aria-hidden="true"><use href="#i-sparkle"/></svg>
-            <span class="model-select__name">MSN AI v0.1</span>
+            <span class="model-select__name">MSN AI v0.2</span>
             <span class="model-select__sub" id="composerModel">local</span>
           </button>
         </div>
+
+        <div class="attachments" id="attachmentBar" hidden aria-label="Files attached to this message"></div>
 
         <label class="visually-hidden" for="composerInput">Message MSN AI</label>
         <textarea id="composerInput" class="composer__input" rows="1" placeholder="Ask MSN AI anything..." maxlength="4000"></textarea>
@@ -309,7 +347,7 @@
       </div>
     </div>
     <dl class="kv" id="modelKv"></dl>
-    <p class="modal__foot">MSN AI v0.1 ships one local model. Streaming and server-side cancellation are not implemented in the backend yet.</p>
+    <p class="modal__foot">MSN AI v0.2 ships one local model. Streaming and server-side cancellation are not implemented in the backend yet.</p>
   </div>
 </dialog>
 
@@ -324,6 +362,26 @@
   <div class="modal__body">
     <p class="modal__intro">Pick a starter prompt — it loads into the composer so you can edit before sending.</p>
     <div class="lib" id="promptLibrary"></div>
+  </div>
+</dialog>
+
+<!-- ==================== FILE PICKERS (hidden) ==================== -->
+<input type="file" id="filePicker" multiple hidden
+       accept=".txt,.md,.markdown,.rst,.log,.json,.xml,.xsd,.csv,.tsv,.html,.htm,.xhtml,.atom,.rss,.pdf,.docx,.xlsx,.xlsm,.pptx,.zip,.png,.jpg,.jpeg,.webp,.bmp,.svg,.mp4,.mov,.mkv,.webm,.avi">
+<input type="file" id="attachPicker" multiple hidden
+       accept=".txt,.md,.markdown,.rst,.log,.json,.xml,.xsd,.csv,.tsv,.html,.htm,.xhtml,.atom,.rss,.pdf,.docx,.xlsx,.xlsm,.pptx,.zip,.png,.jpg,.jpeg,.webp,.bmp,.svg,.mp4,.mov,.mkv,.webm,.avi">
+
+<!-- ==================== EXTRACTED TEXT DIALOG ==================== -->
+<dialog class="modal modal--wide" id="textModal" aria-labelledby="textModalTitle">
+  <form method="dialog" class="modal__head">
+    <h2 id="textModalTitle">Extracted text</h2>
+    <button type="submit" class="icon-btn" aria-label="Close extracted text">
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </form>
+  <div class="modal__body">
+    <p class="modal__intro" id="textModalIntro">This is exactly what MSN AI extracted and indexed from the file.</p>
+    <pre class="extracted" id="textModalBody"></pre>
   </div>
 </dialog>
 

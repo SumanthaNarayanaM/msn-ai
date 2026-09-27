@@ -18,6 +18,8 @@ from app.memory import MemoryManager
 if TYPE_CHECKING:  # pragma: no cover
     from starlette.applications import Starlette
 
+    from app.ingestion.service import IngestionService
+
 
 def _require_state(request: Request) -> "Starlette":
     if not hasattr(request.app.state, "msn_ai_ready"):
@@ -38,3 +40,25 @@ def get_provider(request: Request) -> ModelProvider:
 def get_memory_manager(request: Request) -> MemoryManager:
     app = _require_state(request)
     return app.state.memory_manager
+
+
+def get_ingestion_service(request: Request) -> "IngestionService":
+    """The v0.2 ingestion service, or a clear error if it did not start."""
+    app = _require_state(request)
+    service = getattr(app.state, "ingestion_service", None)
+    if service is None:
+        raise RuntimeError(
+            "File ingestion is unavailable: the ingestion service failed to start. "
+            "Check the server log for the underlying error."
+        )
+    return service
+
+
+def get_ingestion_service_or_none(request: Request) -> "IngestionService | None":
+    """The ingestion service when available, otherwise ``None``.
+
+    Used by chat: a missing ingestion service must degrade to plain chat rather
+    than break conversation entirely.
+    """
+    app = _require_state(request)
+    return getattr(app.state, "ingestion_service", None)

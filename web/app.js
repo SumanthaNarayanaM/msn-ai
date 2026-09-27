@@ -1,5 +1,5 @@
 /**
- * MSN AI v0.1 — frontend application.
+ * MSN AI v0.2 — frontend application.
  *
  * Every backend call goes through ./api/client.js. This module owns UI state
  * and rendering only. There are no hardcoded/fake AI replies: the assistant
@@ -14,6 +14,17 @@ import {
   getSession,
   deleteSession,
   sendChat,
+  getIngestionHealth,
+  listFiles,
+  getFile,
+  uploadFile,
+  analyzeFile,
+  rememberFile,
+  forgetFile,
+  deleteFile,
+  getExtractedText,
+  fileContentUrl,
+  fileThumbnailUrl,
   ApiError,
 } from './api/client.js';
 
@@ -58,12 +69,12 @@ const FEATURE_CARDS = [
   },
   {
     title: 'Upload Files',
-    desc: 'Send documents and images so the model can reason over your own files.',
+    desc: 'Send documents, images and video so MSN AI can reason over your own files.',
     icon: 'i-upload',
     accent: 'var(--pu)',
     glow: 'linear-gradient(135deg, rgba(168,85,247,.9), rgba(236,72,153,.9))',
-    live: false,
-    foot: 'Coming soon',
+    live: true,
+    foot: 'Live now',
   },
   {
     title: 'Voice Mode',
@@ -104,6 +115,22 @@ const state = {
   category: 'All',
   search: '',
   theme: 'dark',
+
+  /* --- v0.2 files --- */
+  /** @type {'explore'|'files'} Which top-level view is on screen. */
+  view: 'explore',
+  /** @type {Array<object>} FileRecord objects from GET /files. */
+  files: [],
+  /** @type {Array<object>} Files queued for upload / being polled. */
+  uploading: [],
+  /** @type {Array<object>} Files attached to the next message. */
+  attachments: [],
+  /** Capability report from GET /ingestion/health. */
+  capabilities: null,
+  ingestionEnabled: false,
+  useKnowledge: true,
+  /** Poll timers keyed by file id. */
+  pollers: new Map(),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -164,6 +191,29 @@ const el = {
   promptsModal: $('promptsModal'),
   promptLibrary: $('promptLibrary'),
   toasts: $('toasts'),
+
+  /* --- v0.2 files --- */
+  filesView: $('filesView'),
+  filesList: $('filesList'),
+  filesEmpty: $('filesEmpty'),
+  filesSummary: $('filesSummary'),
+  capsRow: $('capsRow'),
+  dropzone: $('dropzone'),
+  dropHint: $('dropHint'),
+  dropProgress: $('dropProgress'),
+  dropBar: $('dropBar'),
+  dropLabel: $('dropLabel'),
+  uploadBtn: $('uploadBtn'),
+  uploadBtnMini: $('uploadBtnMini'),
+  filePicker: $('filePicker'),
+  attachPicker: $('attachPicker'),
+  attachBtn: $('attachBtn'),
+  attachmentBar: $('attachmentBar'),
+  knowledgeToggle: $('knowledgeToggle'),
+  textModal: $('textModal'),
+  textModalTitle: $('textModalTitle'),
+  textModalBody: $('textModalBody'),
+  textModalIntro: $('textModalIntro'),
 };
 
 /* ================================================================== */
@@ -278,13 +328,13 @@ function applyHealth(data) {
     el.sideModel.textContent = `AI Model (${provider})`;
     el.sideProvider.textContent = model;
     el.composerModel.textContent = provider;
-    el.appVersion.textContent = `v${String(data.version || '0.1').replace(/^v/, '')}`;
+    el.appVersion.textContent = `v${String(data.version || '0.2').replace(/^v/, '')}`;
     el.modelName.textContent = model;
     el.modelProvider.textContent = `${provider} · ${data.environment || 'local'}`;
     el.offlineDetail.innerHTML = `Reconnected — ${escapeHtml(provider)} / ${escapeHtml(model)} is serving requests.`;
     fillKv(el.settingsKv, [
       ['Status', `<span style="color:#7ff0c4">● ${escapeHtml(data.status)}</span>`],
-      ['App', escapeHtml(`${data.app || 'MSN AI'} v${data.version || '0.1.0'}`)],
+      ['App', escapeHtml(`${data.app || 'MSN AI'} v${data.version || '0.2.0'}`)],
       ['Provider', `<code>${escapeHtml(data.provider || '—')}</code>`],
       ['Model', `<code>${escapeHtml(data.model || '—')}</code>`],
       ['Environment', escapeHtml(data.environment || '—')],
@@ -296,7 +346,7 @@ function applyHealth(data) {
       ['Provider', `<code>${escapeHtml(data.provider || '—')}</code>`],
       ['Runtime', 'llama.cpp (CPU)'],
       ['Context', '2048 tokens'],
-      ['Streaming', 'Not available in v0.1'],
+      ['Streaming', 'Not available in v0.2'],
     ]);
   } else {
     const reason = state.healthError ? state.healthError.message : 'Backend unreachable.';
@@ -441,6 +491,7 @@ function newChat() {
   state.sessionId = null;
   state.messages = [];
   state.lastFailed = null;
+  clearAttachments();
   localStorage.removeItem(STORAGE_SESSION);
   renderThread();
   renderRecent();
@@ -450,6 +501,8 @@ function newChat() {
   syncSendState();
   el.composerInput.focus();
   closeSidebarOnMobile();
+  // Session-scoped files disappear with the chat; remembered ones do not.
+  loadFiles();
 }
 
 /* ================================================================== */
@@ -464,7 +517,24 @@ async function submitMessage(text) {
     toast('Backend Offline', `Start the backend, then retry. (${API_BASE})`, 'error');
   }
 
-  state.messages.push({ role: 'user', content: message, at: new Date() });
+  // Files still being processed cannot be cited, so they are reported instead
+  // of being silently sent.
+  const pendingAttachments = state.attachments.filter((f) => f.status === 'processing');
+  const usable = state.attachments.filter((f) => f.status === 'ready');
+  if (pendingAttachments.length) {
+    toast(
+      'Still reading files',
+      `${pendingAttachments.length} file(s) are still being processed; they are not used in this reply.`,
+      'warn'
+    );
+  }
+
+  state.messages.push({
+    role: 'user',
+    content: message,
+    at: new Date(),
+    files: state.attachments.map((f) => ({ display_name: f.display_name, status: f.status })),
+  });
   state.generating = true;
   state.lastFailed = { message, sessionId: state.sessionId };
   el.composerInput.value = '';
@@ -481,21 +551,43 @@ async function submitMessage(text) {
   const started = performance.now();
 
   try {
-    const data = await sendChat({ message, sessionId: state.sessionId, signal: controller.signal });
+    const data = await sendChat({
+      message,
+      sessionId: state.sessionId,
+      attachments: usable.map((f) => f.id),
+      useKnowledge: state.useKnowledge,
+      signal: controller.signal,
+    });
     const elapsed = Math.round(performance.now() - started);
     pending.remove();
 
     // The backend is the source of truth for the session id.
     state.sessionId = data.session_id;
     localStorage.setItem(STORAGE_SESSION, state.sessionId);
+    // The first message can create the session, so the file list is re-read
+    // against the id the backend just assigned.
+    loadFiles();
 
-    state.messages.push({ role: 'assistant', content: String(data.reply ?? ''), at: new Date(), elapsed });
+    state.messages.push({
+      role: 'assistant',
+      content: String(data.reply ?? ''),
+      at: new Date(),
+      elapsed,
+      sources: Array.isArray(data.sources) ? data.sources : [],
+    });
     state.lastFailed = null;
+    clearAttachments();
     renderThread();
     scrollToBottom();
 
     const secs = (elapsed / 1000).toFixed(1);
-    toast('Reply ready', `${data.provider} · ${data.model} · ${secs}s`, 'ok', 3200);
+    const cited = Array.isArray(data.sources) ? data.sources.length : 0;
+    toast(
+      'Reply ready',
+      cited ? `${data.provider} · ${data.model} · ${secs}s · ${cited} source(s)` : `${data.provider} · ${data.model} · ${secs}s`,
+      'ok',
+      3200
+    );
   } catch (err) {
     pending.remove();
 
@@ -735,7 +827,20 @@ function messageNode(msg, index) {
         </div>
       </div>`;
   } else if (isUser) {
-    body = `<div class="msg__body"><div class="msg__text">${escapeHtml(msg.content)}</div></div>`;
+    const files = Array.isArray(msg.files) ? msg.files : [];
+    const fileChips = files.length
+      ? `<div class="attachments" style="padding:0 0 8px">${files
+          .map(
+            (f) =>
+              `<span class="chip-file" data-status="${escapeHtml(f.status || 'ready')}">
+                 <span class="chip-file__name">${escapeHtml(f.display_name || f.filename || 'file')}</span>
+               </span>`
+          )
+          .join('')}</div>`
+      : '';
+    body = `<div class="msg__body">${fileChips}<div class="msg__text">${escapeHtml(
+      msg.content
+    )}</div></div>`;
   } else {
     body = `<div class="msg__body"></div>`;
   }
@@ -751,8 +856,27 @@ function messageNode(msg, index) {
     } else {
       target.appendChild(renderMarkdown(msg.content));
     }
+    // Citations: only the excerpts the backend actually used, never invented.
+    const sources = Array.isArray(msg.sources) ? msg.sources : [];
+    if (sources.length) target.appendChild(sourcesNode(sources));
   }
   return node;
+}
+
+function sourcesNode(sources) {
+  const wrap = document.createElement('div');
+  wrap.className = 'sources';
+  const list = sources
+    .map(
+      (s) => `
+      <button type="button" class="source" data-file-id="${escapeHtml(s.file_id || '')}">
+        <span class="source__name">${svgIcon('i-doc')} ${escapeHtml(s.source || s.filename || '')}</span>
+        <span class="source__excerpt">${escapeHtml(String(s.text || '').slice(0, 220))}</span>
+      </button>`
+    )
+    .join('');
+  wrap.innerHTML = `<span class="sources__label">Sources used</span><div class="sources__list">${list}</div>`;
+  return wrap;
 }
 
 function renderThread() {
@@ -798,15 +922,27 @@ function scrollToBottom(instant = false) {
   });
 }
 
+function setView(view) {
+  state.view = view;
+  if (el.filesView) el.filesView.hidden = view !== 'files';
+  document.querySelectorAll('.nav__item[data-nav]').forEach((b) =>
+    b.classList.toggle('is-active', b.dataset.nav === view)
+  );
+}
+
 function showChatView() {
   const hasMessages = state.messages.length > 0;
+  setView('explore');
   el.welcomeView.hidden = hasMessages;
   el.welcomeView.classList.toggle('is-active', !hasMessages);
   el.chatView.hidden = !hasMessages;
   el.thread.classList.toggle('is-active', hasMessages);
-  document.querySelectorAll('.nav__item[data-nav]').forEach((b) =>
-    b.classList.toggle('is-active', b.dataset.nav === 'explore' && !hasMessages)
-  );
+}
+
+function showFilesView() {
+  setView('files');
+  closeSidebarOnMobile();
+  loadFiles();
 }
 
 function showWelcomeView() {
@@ -1011,7 +1147,7 @@ function bindEvents() {
   el.featureCards.addEventListener('click', (e) => {
     const soon = e.target.closest('[data-soon]');
     if (soon) {
-      toast(`${soon.dataset.soon} — Coming soon`, 'Not available in MSN AI v0.1. No backend endpoint exists for this yet.', 'warn', 5200);
+      toast(`${soon.dataset.soon} — Coming soon`, 'Not available in MSN AI v0.2. No backend endpoint exists for this yet.', 'warn', 5200);
       return;
     }
     el.composerInput.focus();
@@ -1057,7 +1193,7 @@ function bindEvents() {
   document.addEventListener('click', (e) => {
     const soon = e.target.closest('[data-soon]');
     if (soon && !soon.closest('.card') && !soon.classList.contains('card')) {
-      toast(`${soon.dataset.soon} — Coming soon`, 'No backend endpoint supports this in v0.1.', 'warn', 4600);
+      toast(`${soon.dataset.soon} — Coming soon`, 'No backend endpoint supports this in v0.2.', 'warn', 4600);
     }
   });
 
@@ -1065,6 +1201,10 @@ function bindEvents() {
     btn.addEventListener('click', () => {
       if (btn.dataset.nav === 'prompts') {
         el.promptsModal.showModal();
+        return;
+      }
+      if (btn.dataset.nav === 'files') {
+        showFilesView();
         return;
       }
       if (btn.dataset.nav === 'explore') {
@@ -1075,6 +1215,86 @@ function bindEvents() {
         }
       }
     });
+  });
+
+  /* --- v0.2: My Files --- */
+  el.uploadBtn?.addEventListener('click', () => el.filePicker?.click());
+  el.uploadBtnMini?.addEventListener('click', () => el.filePicker?.click());
+  el.dropzone?.addEventListener('click', () => el.filePicker?.click());
+  el.dropzone?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      el.filePicker?.click();
+    }
+  });
+  el.filePicker?.addEventListener('change', (e) => {
+    handleFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  el.attachBtn?.addEventListener('click', () => el.attachPicker?.click());
+  el.attachPicker?.addEventListener('change', (e) => {
+    handleFiles(e.target.files, { attach: true });
+    e.target.value = '';
+  });
+
+  el.attachmentBar?.addEventListener('click', (e) => {
+    const remove = e.target.closest('[data-remove-attachment]');
+    if (remove) removeAttachment(remove.dataset.removeAttachment);
+  });
+
+  el.knowledgeToggle?.addEventListener('change', (e) => {
+    state.useKnowledge = e.target.checked;
+    toast(
+      state.useKnowledge ? 'Files enabled' : 'Files disabled',
+      state.useKnowledge
+        ? 'MSN AI will consult your files and cite them.'
+        : 'MSN AI will answer from the model only.',
+      'info',
+      2600
+    );
+  });
+
+  el.filesList?.addEventListener('click', (e) => {
+    const trigger = e.target.closest('[data-file-action]');
+    if (trigger) onFileAction(trigger.dataset.fileAction, trigger.dataset.id);
+  });
+
+  // A cited source opens the file it came from.
+  el.threadInner.addEventListener('click', (e) => {
+    const source = e.target.closest('.source');
+    if (!source) return;
+    state.view = 'files';
+    showFilesView();
+    requestAnimationFrame(() => {
+      const card = el.filesList?.querySelector(`[data-id="${CSS.escape(source.dataset.fileId || '')}"]`);
+      card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card?.animate(
+        [{ outline: '2px solid var(--cy)' }, { outline: '2px solid transparent' }],
+        { duration: 1600 }
+      );
+    });
+  });
+
+  // Drag and drop, with the whole window guarded so stray drops never navigate away.
+  ['dragenter', 'dragover'].forEach((type) =>
+    window.addEventListener(type, (e) => {
+      e.preventDefault();
+      if (state.ingestionEnabled && el.dropzone) el.dropzone.classList.add('is-over');
+    })
+  );
+  ['dragleave', 'drop'].forEach((type) =>
+    window.addEventListener(type, (e) => {
+      e.preventDefault();
+      if (e.type === 'dragleave' && e.relatedTarget) return;
+      el.dropzone?.classList.remove('is-over');
+    })
+  );
+  window.addEventListener('drop', (e) => {
+    const inFilesView = state.view === 'files' || e.target.closest?.('#dropzone, #attachPicker, .composer');
+    if (e.dataTransfer?.files?.length && inFilesView && !e.target.closest?.('#dropzone')) {
+      handleFiles(e.dataTransfer.files, { attach: !!e.target.closest?.('.composer') });
+    }
   });
 
   /* --- keyboard --- */
@@ -1167,6 +1387,8 @@ function boot() {
   renderWelcome();
   renderPromptLibrary();
   renderThread();
+  renderFiles();
+  renderAttachments();
   showWelcomeView();
   renderRecent();
   bindEvents();
@@ -1177,6 +1399,9 @@ function boot() {
   (async () => {
     const online = await refreshHealth();
     if (online) await restoreSession();
+    // Capability discovery is independent of the session, so files can be
+    // listed (and uploads accepted) before the first message is ever sent.
+    loadIngestion();
     setInterval(() => {
       if (!document.hidden) refreshHealth({ silent: true });
     }, HEALTH_POLL_MS);
@@ -1208,6 +1433,452 @@ async function restoreSession() {
       toast('Could not restore chat', err.message, 'warn');
     }
   }
+}
+
+/* ================================================================== */
+/* v0.2 — My Files                                                     */
+/* ================================================================== */
+
+const CAP_LABELS = {
+  ocr: 'Text in images (OCR)',
+  vision: 'Image understanding',
+  speech: 'Video speech-to-text',
+  video_frames: 'Video frame sampling',
+  embeddings: 'Semantic search',
+};
+
+const STATUS_LABELS = {
+  uploaded: 'Uploaded',
+  processing: 'Reading…',
+  ready: 'Ready',
+  failed: 'Failed',
+};
+
+/** Load capabilities and the file list; safe to call repeatedly. */
+async function loadIngestion() {
+  try {
+    const health = await getIngestionHealth();
+    state.capabilities = health.capabilities || {};
+    state.ingestionEnabled = Boolean(health.enabled);
+    renderCapabilities(health);
+  } catch (err) {
+    state.capabilities = {};
+    state.ingestionEnabled = false;
+    renderCapabilities(null, err);
+  }
+  await loadFiles();
+}
+
+async function loadFiles() {
+  try {
+    const data = await listFiles({ sessionId: state.sessionId });
+    state.files = Array.isArray(data.files) ? data.files : [];
+  } catch (err) {
+    if (!(err instanceof ApiError && err.isOffline)) {
+      toast('Could not load files', err.message, 'warn');
+    }
+    state.files = [];
+  }
+  renderFiles();
+}
+
+function renderCapabilities(health, error) {
+  if (!el.capsRow) return;
+  if (error) {
+    el.capsRow.innerHTML = `<span class="cap" data-available="false">
+      <span class="cap__dot"></span>File reading is unavailable — ${escapeHtml(error.message)}
+    </span>`;
+    return;
+  }
+  const caps = state.capabilities || {};
+  const parts = Object.entries(CAP_LABELS).map(([key, label]) => {
+    const cap = caps[key] || {};
+    const available = Boolean(cap.available);
+    // The backend's own reason text is shown on hover, so nothing is guessed.
+    const reason = available ? 'Available' : cap.reason || 'Not installed';
+    return `<span class="cap" data-available="${available}" title="${escapeHtml(reason)}">
+      <span class="cap__dot"></span>${escapeHtml(label)}${available ? '' : ' <em style="opacity:.7">— not installed</em>'}
+    </span>`;
+  });
+  const limit = health?.limits?.max_upload_mb;
+  if (limit) {
+    parts.push(
+      `<span class="cap" data-available="true" title="Uploads larger than this are rejected">
+        <span class="cap__dot"></span>Up to ${escapeHtml(String(limit))} MB per file
+      </span>`
+    );
+  }
+  el.capsRow.innerHTML = parts.join('');
+  if (el.dropHint) {
+    el.dropHint.textContent = state.ingestionEnabled
+      ? `or click to browse. Up to ${limit ?? 50} MB per file, processed on this machine.`
+      : 'File ingestion is disabled on the backend right now.';
+  }
+}
+
+function fileIconFor(file) {
+  if (file.has_thumbnail) return null; // an <img> is rendered instead
+  const ext = (file.extension || '').toLowerCase();
+  if (['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].includes(ext)) return 'i-image';
+  if (['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) return 'i-video';
+  if (['.xlsx', '.xlsm', '.csv', '.tsv'].includes(ext)) return 'i-tools';
+  if (['.zip'].includes(ext)) return 'i-doc';
+  return 'i-doc';
+}
+
+function humanSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = Number(bytes);
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
+function renderFiles() {
+  if (!el.filesList) return;
+  const rows = [...state.uploading, ...state.files];
+  el.filesEmpty.hidden = rows.length > 0;
+
+  el.filesList.innerHTML = rows.map(fileCardHtml).join('');
+
+  if (state.files.length) {
+    const ready = state.files.filter((f) => f.status === 'ready').length;
+    el.filesSummary.textContent = `${state.files.length} file(s) · ${ready} readable · indexed locally for cited answers.`;
+  } else if (!state.uploading.length) {
+    el.filesSummary.textContent =
+      'Upload documents, images and video. MSN AI reads them locally and cites what it used.';
+  }
+}
+
+function fileCardHtml(file) {
+  const status = file.status || 'uploaded';
+  const icon = fileIconFor(file);
+  const thumb = file.has_thumbnail
+    ? `<img src="${fileThumbnailUrl(file.id)}" alt="" loading="lazy">`
+    : svgIcon(icon || 'i-doc');
+
+  const bits = [humanSize(file.size), STATUS_LABELS[status] || status];
+  if (file.chunk_count) bits.push(`${file.chunk_count} passage(s)`);
+  if (file.is_video) bits.push('video');
+  if (file.is_image) bits.push('image');
+
+  const progress =
+    status === 'processing' || status === 'uploaded'
+      ? `<div class="bar" style="margin-top:6px"><div class="bar__fill" style="width:${Math.round(
+          (file.progress || 0.05) * 100
+        )}%"></div></div>${
+          file.progress_stage
+            ? `<span class="filecard__unavail">${escapeHtml(file.progress_stage)}</span>`
+            : ''
+        }`
+      : '';
+
+  // Anything the backend could not read is stated plainly, never hidden.
+  const problems = [];
+  if (file.error) problems.push(`<span class="filecard__error">${escapeHtml(file.error)}</span>`);
+  (file.warnings || []).slice(0, 2).forEach((w) => {
+    problems.push(`<span class="filecard__warn">${escapeHtml(w)}</span>`);
+  });
+  Object.entries(file.unavailable || {}).forEach(([k, v]) => {
+    problems.push(`<span class="filecard__unavail">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`);
+  });
+
+  const scopePill =
+    file.remembered && file.scope !== 'session'
+      ? `<span class="pill" data-scope="${escapeHtml(file.scope)}" title="Visible in every session">${escapeHtml(
+          file.scope
+        )}</span>`
+      : '';
+
+  const actions = [];
+  if (status === 'ready') {
+    actions.push(
+      `<button type="button" class="mini" data-file-action="text" data-id="${escapeHtml(
+        file.id
+      )}">View text</button>`
+    );
+  }
+  if (status === 'failed' || (file.warnings || []).length) {
+    actions.push(
+      `<button type="button" class="mini" data-file-action="analyze" data-id="${escapeHtml(
+        file.id
+      )}" title="Re-run extraction, e.g. after installing a missing tool">Re-read</button>`
+    );
+  }
+  if (status === 'ready') {
+    actions.push(
+      file.remembered
+        ? `<button type="button" class="mini" data-file-action="forget" data-id="${escapeHtml(
+            file.id
+          )}" title="Remove from the knowledge base but keep the file">Forget</button>`
+        : `<button type="button" class="mini" data-file-action="remember" data-id="${escapeHtml(
+            file.id
+          )}" title="Keep this in memory across sessions">Remember</button>`
+    );
+  }
+  actions.push(
+    `<a class="mini" href="${fileContentUrl(file.id)}" download="${escapeHtml(
+      file.display_name
+    )}" title="Download the original file">Open</a>`,
+    `<button type="button" class="mini mini--danger" data-file-action="delete" data-id="${escapeHtml(
+      file.id
+    )}">Delete</button>`
+  );
+
+  return `
+    <div class="filecard" data-id="${escapeHtml(file.id)}" data-status="${escapeHtml(status)}">
+      <div class="filecard__thumb">${thumb}</div>
+      <div class="filecard__main">
+        <div class="filecard__name" title="${escapeHtml(file.display_name)}">${escapeHtml(
+    file.display_name || file.filename
+  )}</div>
+        <div class="filecard__meta">
+          <span class="pill" data-status="${escapeHtml(status)}">${escapeHtml(
+    STATUS_LABELS[status] || status
+  )}</span>
+          ${scopePill}
+          <span>${escapeHtml(bits.filter(Boolean).join(' · '))}</span>
+        </div>
+        ${progress}
+        ${problems.join('')}
+      </div>
+      <div class="filecard__actions">${actions.join('')}</div>
+    </div>`;
+}
+
+/* ---------- upload ---------- */
+
+async function handleFiles(fileList, { attach = false } = {}) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (!state.ingestionEnabled) {
+    toast('File reading is off', 'The backend reports that file ingestion is disabled.', 'warn');
+    return;
+  }
+
+  for (const file of files) {
+    // A local placeholder appears immediately so the UI feels responsive.
+    const placeholder = {
+      id: `pending-${Math.random().toString(36).slice(2, 10)}`,
+      display_name: file.name,
+      filename: file.name,
+      size: file.size,
+      status: 'processing',
+      progress: 0.02,
+      progress_stage: 'uploading',
+      is_image: file.type.startsWith('image/'),
+      is_video: file.type.startsWith('video/'),
+      warnings: [],
+      unavailable: {},
+      _local: file,
+    };
+    if (attach) state.attachments.push(placeholder);
+    else state.uploading.push(placeholder);
+    renderFiles();
+    renderAttachments();
+  }
+
+  for (const placeholder of [...state.uploading, ...state.attachments]) {
+    if (placeholder._local && !placeholder._sent) {
+      await uploadOne(placeholder, { attach });
+    }
+  }
+  renderFiles();
+  renderAttachments();
+}
+
+async function uploadOne(placeholder, { attach }) {
+  const file = placeholder._local;
+  if (!file) return;
+  placeholder._sent = true;
+  setDropProgress(true, 0, `Uploading ${file.name}…`);
+  try {
+    const record = await uploadFile({
+      file,
+      sessionId: state.sessionId,
+      onProgress: (fraction) => setDropProgress(true, fraction, `Uploading ${file.name}…`),
+    });
+    mergeUploaded(placeholder, record, { attach });
+    if (!attach) {
+      toast('Uploaded', `${record.display_name} is being read.`, 'ok', 2600);
+    }
+    pollUntilTerminal(record.id, { attach });
+  } catch (err) {
+    placeholder.status = 'failed';
+    placeholder.error = err.message;
+    placeholder._sent = false;
+    placeholder._local = null;
+    toast('Upload failed', err.message, 'error', 6000);
+  } finally {
+    setDropProgress(false);
+    renderFiles();
+    renderAttachments();
+  }
+}
+
+function mergeUploaded(placeholder, record, { attach }) {
+  const list = attach ? state.attachments : state.uploading;
+  const index = list.findIndex((f) => f.id === placeholder.id);
+  const next = { ...placeholder, ...record, _local: null };
+  if (index >= 0) list.splice(index, 1, next);
+  else list.push(next);
+  if (attach) renderAttachments();
+  else renderFiles();
+}
+
+/** Poll GET /files/{id} until the file is ready or failed. */
+function pollUntilTerminal(fileId, { attach = false } = {}) {
+  if (state.pollers.has(fileId)) return;
+  const started = Date.now();
+  // Bounded so a wedged backend cannot poll forever.
+  const maxWaitMs = 15 * 60 * 1000;
+  const tick = async () => {
+    if (Date.now() - started > maxWaitMs) {
+      state.pollers.delete(fileId);
+      return;
+    }
+    let record;
+    try {
+      record = await getFile(fileId);
+    } catch {
+      state.pollers.set(fileId, setTimeout(tick, 2000));
+      return;
+    }
+    const attached = state.attachments.find((f) => f.id === fileId);
+    if (attached) {
+      Object.assign(attached, record);
+      renderAttachments();
+    }
+    const uploading = state.uploading.find((f) => f.id === fileId);
+    if (uploading) {
+      Object.assign(uploading, record);
+      renderFiles();
+    }
+    const known = state.files.find((f) => f.id === fileId);
+    if (known) Object.assign(known, record);
+    else if (record.status === 'ready' || record.status === 'failed') state.files.push(record);
+    renderFiles();
+
+    if (record.status === 'ready' || record.status === 'failed') {
+      state.pollers.delete(fileId);
+      if (record.status === 'ready') {
+        toast('Ready to use', `${record.display_name} can now be cited in answers.`, 'ok', 3000);
+      } else {
+        toast('Could not read file', record.error || 'Extraction failed.', 'error', 6000);
+      }
+      return;
+    }
+    state.pollers.set(fileId, setTimeout(tick, 1200));
+  };
+  state.pollers.set(fileId, setTimeout(tick, 600));
+}
+
+/* ---------- attachments ---------- */
+
+function renderAttachments() {
+  if (!el.attachmentBar) return;
+  el.attachmentBar.hidden = state.attachments.length === 0;
+  el.attachmentBar.innerHTML = state.attachments
+    .map(
+      (f) => `<span class="chip-file" data-status="${escapeHtml(f.status || 'ready')}"
+        title="${escapeHtml(f.status === 'ready' ? 'Will be used to answer' : 'Not usable yet')}">
+        <span class="chip-file__name">${escapeHtml(f.display_name || f.filename)}</span>
+        <button type="button" class="chip-file__x" data-remove-attachment="${escapeHtml(
+          f.id
+        )}" aria-label="Remove ${escapeHtml(f.display_name || 'file')}">×</button>
+      </span>`
+    )
+    .join('');
+}
+
+function removeAttachment(fileId) {
+  state.attachments = state.attachments.filter((f) => f.id !== fileId);
+  renderAttachments();
+}
+
+function clearAttachments() {
+  state.attachments = [];
+  renderAttachments();
+}
+
+function setDropProgress(visible, fraction = 0, label = '') {
+  if (!el.dropProgress) return;
+  el.dropProgress.hidden = !visible;
+  if (el.dropBar) el.dropBar.style.width = `${Math.round(fraction * 100)}%`;
+  if (label && el.dropLabel) el.dropLabel.textContent = label;
+}
+
+/* ---------- file actions ---------- */
+
+async function onFileAction(action, fileId) {
+  const record = state.files.find((f) => f.id === fileId) || state.attachments.find((f) => f.id === fileId);
+  try {
+    if (action === 'text') {
+      const data = await getExtractedText(fileId);
+      el.textModalTitle.textContent = data.filename || 'Extracted text';
+      el.textModalIntro.textContent = data.char_count
+        ? `${data.char_count.toLocaleString()} characters were extracted and indexed from this file.`
+        : 'No text was extracted from this file.';
+      el.textModalBody.textContent = data.text || '(empty)';
+      el.textModal.showModal();
+      return;
+    }
+    if (action === 'analyze') {
+      toast('Re-reading file', 'Re-running extraction…', 'info', 2000);
+      const updated = await analyzeFile(fileId);
+      replaceFile(updated);
+      renderFiles();
+      renderAttachments();
+      toast('Re-read finished', `${updated.display_name}: ${STATUS_LABELS[updated.status]}`, 'ok', 3000);
+      return;
+    }
+    if (action === 'remember') {
+      const updated = await rememberFile(fileId, { scope: 'personal' });
+      replaceFile(updated);
+      renderFiles();
+      toast('Remembered', `${updated.display_name} stays available in all your chats.`, 'ok', 3200);
+      return;
+    }
+    if (action === 'forget') {
+      const updated = await forgetFile(fileId);
+      replaceFile(updated);
+      renderFiles();
+      toast('Forgotten', 'The file is kept, but MSN AI will no longer cite it.', 'ok', 3200);
+      return;
+    }
+    if (action === 'delete') {
+      if (!window.confirm(`Delete "${record?.display_name || 'this file'}" and everything indexed from it?`)) {
+        return;
+      }
+      const button = document.querySelector(`[data-file-action="delete"][data-id="${CSS.escape(fileId)}"]`);
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Deleting…';
+      }
+      await deleteFile(fileId);
+      state.files = state.files.filter((f) => f.id !== fileId);
+      state.attachments = state.attachments.filter((f) => f.id !== fileId);
+      state.pollers.delete(fileId);
+      renderFiles();
+      renderAttachments();
+      toast('Deleted', 'The file and its indexed passages are gone.', 'ok', 3000);
+    }
+  } catch (err) {
+    toast('That did not work', err.message, 'error', 6000);
+    renderFiles();
+  }
+}
+
+function replaceFile(record) {
+  const index = state.files.findIndex((f) => f.id === record.id);
+  if (index >= 0) state.files.splice(index, 1, record);
+  else state.files.push(record);
+  const attached = state.attachments.find((f) => f.id === record.id);
+  if (attached) Object.assign(attached, record);
 }
 
 if (document.readyState === 'loading') {

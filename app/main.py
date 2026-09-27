@@ -13,40 +13,50 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
-from app.core.config import PROJECT_ROOT, settings
+from app.core.config import PROJECT_ROOT, Settings, settings
 from app.core.errors import register_error_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.session import SessionManager
 from app.inference.base import ModelProvider
 from app.inference.registry import create_provider_safe
+from app.ingestion.embeddings import build_embedding_provider
+from app.ingestion.knowledge import KnowledgeBase
+from app.ingestion.registry import ExtractorRegistry
+from app.ingestion.service import IngestionService
+from app.ingestion.store import FileStore
 from app.memory import LocalMemoryStore, MemoryManager
-from app.utils.paths import ensure_standard_directories
+from app.utils.paths import ensure_ingestion_directories, ensure_standard_directories
 
 logger = get_logger("msn_ai.app")
 
 
-def create_app() -> FastAPI:
-    """Build and configure the MSN AI application."""
+def create_app(config: Settings | None = None) -> FastAPI:
+    """Build and configure the MSN AI application.
+
+    ``config`` overrides the process-wide settings; tests use it to point the
+    app at a temporary data directory.
+    """
     setup_logging()
+    config = config or settings
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        _bootstrap(app)
+        _bootstrap(app, config)
         try:
             yield
         finally:
             _shutdown(app)
 
     app = FastAPI(
-        title=settings.app_name,
-        version=settings.version,
+        title=config.app_name,
+        version=config.version,
         description=(
             "MSN AI - fully local AI platform (Code / Image / Video / Agent / "
             "RAG / Tools). Local chat + coding assistant with conversation and "
             "long-term memory."
         ),
         lifespan=lifespan,
-        debug=settings.debug,
+        debug=config.debug,
     )
 
     app.add_middleware(
@@ -65,8 +75,8 @@ def create_app() -> FastAPI:
     @app.get("/", include_in_schema=False)
     def root() -> dict:
         return {
-            "service": settings.app_name,
-            "version": settings.version,
+            "service": config.app_name,
+            "version": config.version,
             "docs": "/docs",
             "health": "/api/v1/health",
         }
@@ -74,42 +84,65 @@ def create_app() -> FastAPI:
     return app
 
 
-def _bootstrap(app: FastAPI) -> None:
+def _bootstrap(app: FastAPI, config: Settings) -> None:
     """Wire runtime singletons onto app.state."""
     started = time.time()
     ensure_standard_directories(
-        data_dir=settings.data_dir,
-        model_storage_dir=settings.model_storage_dir,
-        conversations_dir=settings.conversations_path(),
+        data_dir=config.data_dir,
+        model_storage_dir=config.model_storage_dir,
+        conversations_dir=config.conversations_path(),
     )
-    settings.memory_path().mkdir(parents=True, exist_ok=True)
+    ensure_ingestion_directories(config)
+    config.memory_path().mkdir(parents=True, exist_ok=True)
 
     session_manager = SessionManager(
-        storage_dir=settings.conversations_path(),
-        persist=settings.session_persist,
+        storage_dir=config.conversations_path(),
+        persist=config.session_persist,
     )
     memory_manager = MemoryManager(
-        store=LocalMemoryStore(storage_dir=settings.memory_path())
+        store=LocalMemoryStore(storage_dir=config.memory_path())
     )
     provider, provider_meta = create_provider_safe(
-        name=settings.provider,
-        model_name=settings.model_name,
+        name=config.provider,
+        model_name=config.model_name,
     )
 
+    app.state.config = config
     app.state.session_manager = session_manager
     app.state.memory_manager = memory_manager
     app.state.provider = provider
     app.state.provider_meta = provider_meta
     app.state.msn_ai_ready = True
 
+    # v0.2 ingestion: optional dependencies must never stop the server, so a
+    # failure here degrades the file features instead of taking chat offline.
+    ingestion_error = ""
+    try:
+        embedder = build_embedding_provider(config)
+        store = FileStore(config)
+        knowledge = KnowledgeBase(config, embedder)
+        app.state.ingestion_service = IngestionService(
+            config, embedder, store, knowledge
+        )
+        logger.info(
+            "Ingestion ready: %d format(s), knowledge=%d chunk(s)",
+            len(ExtractorRegistry().supported_extensions()),
+            int(knowledge.stats()["chunks"]),
+        )
+    except Exception as exc:  # pragma: no cover - startup guard
+        app.state.ingestion_service = None
+        ingestion_error = str(exc)
+        logger.error("Ingestion unavailable: %s", exc, exc_info=True)
+
     provider_state = "fallback->mock" if provider_meta.get("fallback") else provider_meta["resolved"]
     logger.info(
-        "MSN AI %s started (%s) in %.2fs | provider=%s model=%s",
-        settings.version,
-        settings.env,
+        "MSN AI %s started (%s) in %.2fs | provider=%s model=%s | ingestion=%s",
+        config.version,
+        config.env,
         time.time() - started,
         provider_state,
         provider.info().name,
+        "error" if ingestion_error else "ready",
     )
 
 
@@ -129,6 +162,9 @@ def _shutdown(app: FastAPI) -> None:
     memory: MemoryManager | None = getattr(app.state, "memory_manager", None)
     if memory is not None:
         memory.store.unload()
+    ingestion = getattr(app.state, "ingestion_service", None)
+    if ingestion is not None:
+        ingestion.close()
     logger.info("MSN AI shut down cleanly.")
 
 

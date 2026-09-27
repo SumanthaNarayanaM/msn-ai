@@ -24,6 +24,37 @@ STANDARD_DIRS = (
     "web",
 )
 
+#: v0.2 multimodal ingestion layout. Every uploaded byte and every generated
+#: artifact lives under one of these directories, which are themselves under
+#: ``data_dir`` -- nothing is ever written outside the project root.
+INGESTION_DIRS = (
+    "uploads",
+    "extracted",
+    "knowledge",
+    "embeddings",
+    "thumbnails",
+    "video_frames",
+    "metadata",
+)
+
+
+def ensure_ingestion_directories(settings) -> list[Path]:
+    """Create the v0.2 ingestion directory tree from a Settings instance."""
+    created: list[Path] = []
+    for path in (
+        settings.uploads_path(),
+        settings.extracted_path(),
+        settings.knowledge_path(),
+        settings.embeddings_path(),
+        settings.thumbnails_path(),
+        settings.video_frames_path(),
+        settings.files_metadata_path(),
+    ):
+        path.mkdir(parents=True, exist_ok=True)
+        created.append(path)
+    logger.debug("Ensured %d ingestion directories.", len(created))
+    return created
+
 
 def ensure_standard_directories(
     data_dir: Path,
